@@ -1,15 +1,13 @@
-// server.js
 import { Server } from "socket.io";
 import http from "http";
 
-const port = process.env.PORT || 3003; // Render asigna un puerto dinámico
+const port = process.env.PORT || 3003;
 const server = http.createServer();
 
 const io = new Server(server, {
-  cors: { origin: "*" }, // permite cualquier cliente
+  cors: { origin: "*" },
 });
 
-// Evento de conexión
 io.on("connection", (client) => {
   console.log("Cliente conectado:", client.id);
 
@@ -19,22 +17,34 @@ io.on("connection", (client) => {
     client.data.username = username;
     client.data.room = room;
 
-    // Mensaje solo para el usuario
+    // Mensaje solo para el usuario que entra
     client.emit("msg", `Bienvenido ${username} a la sala ${room}`);
 
-    // Mensaje a todos los demás en la sala
+    // Mensaje para todos los demás en la sala
     client.to(room).emit("msg", `${username} se ha unido a la sala.`);
   });
 
   // Manejo de mensajes
   client.on("stream", ({ user, room, message }) => {
-  if (!room || !user || !message) return;
-  // Envía a todos en la sala EXCEPTO el que envía
-  client.to(room).emit("stream", { user, message });
-});
+    if (!room || !user || !message) return;
+    // Envía solo a los demás en la sala
+    client.to(room).emit("stream", { user, message });
+  });
 
+  client.on("changeRoom", ({ newRoom }) => {
+    const oldRoom = client.data.room;
 
-  // Desconexión
+    if (oldRoom) {
+      client.leave(oldRoom);
+      client.to(oldRoom).emit("msg", `${client.data.username} ha salido de la sala.`);
+    }
+
+    client.join(newRoom);
+    client.data.room = newRoom;
+    client.emit("msg", `Has entrado a la sala ${newRoom}`);
+    client.to(newRoom).emit("msg", `${client.data.username} se ha unido a la sala.`);
+  });
+
   client.on("disconnect", () => {
     if (client.data.username && client.data.room) {
       io.to(client.data.room).emit(
